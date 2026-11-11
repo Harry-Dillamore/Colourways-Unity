@@ -23,10 +23,14 @@ public class PaintDecalBatcher : MonoBehaviour
     }
 
     [Header("Material & Texture")]
-    [Tooltip("Optional custom splatter texture. If null, a high-quality procedural texture atlas will be generated automatically.")]
     public Texture2D customSplatterTexture;
-    [Tooltip("Custom material using Custom/PaintSplatter shader. If null, automatically created.")]
     public Material paintMaterial;
+
+    [Header("Corner Wrapping Settings")]
+    [Tooltip("Layer mask for static world geometry (walls, floors) to detect corners against.")]
+    public LayerMask environmentMask = ~0;
+    [Tooltip("Raycast distance to probe for adjacent perpendicular walls/floors.")]
+    public float cornerSearchDistance = 0.4f;
 
     [Header("Batch Stats (Read-Only)")]
     [SerializeField] private int totalSplatsCount = 0;
@@ -96,22 +100,28 @@ public class PaintDecalBatcher : MonoBehaviour
     }
 
     /// <summary>
-    /// Adds a paint splodge to the batch. Call Commit() when finished adding a burst of splatters.
+    /// Standard splatter entry point (compatibility wrapper).
     /// </summary>
     public void AddSplatter(Vector3 position, Vector3 normal, float radius, Color32 color, int variant = -1)
+    {
+        AddWrappingSplatter(position, normal, radius, color, variant);
+    }
+
+    /// <summary>
+    /// Adds a splatter that detects adjacent perpendicular surfaces and folds over 90-degree corners.
+    /// </summary>
+    public void AddWrappingSplatter(Vector3 position, Vector3 normal, float radius, Color32 color, int variant = -1)
     {
         if (normal.sqrMagnitude < 0.001f) normal = Vector3.up;
         normal.Normalize();
 
-        // Small normal offset to ensure no precision clipping on flat geometry
         Vector3 offsetPos = position + normal * 0.004f;
 
-        // Calculate surface tangent frame
-        Vector3 up = Mathf.Abs(Vector3.Dot(normal, Vector3.up)) < 0.95f ? Vector3.up : Vector3.right;
-        Vector3 tangent = Vector3.Cross(normal, up).normalized;
+        // Tangent Basis
+        Vector3 upDir = Mathf.Abs(Vector3.Dot(normal, Vector3.up)) < 0.95f ? Vector3.up : Vector3.right;
+        Vector3 tangent = Vector3.Cross(normal, upDir).normalized;
         Vector3 bitangent = Vector3.Cross(normal, tangent).normalized;
 
-        // Random rotation around surface normal
         float angle = Random.Range(0f, Mathf.PI * 2f);
         float cos = Mathf.Cos(angle);
         float sin = Mathf.Sin(angle);
@@ -119,53 +129,116 @@ public class PaintDecalBatcher : MonoBehaviour
         Vector3 rotTangent = (tangent * cos + bitangent * sin) * radius;
         Vector3 rotBitangent = (-tangent * sin + bitangent * cos) * radius;
 
-        int startIndex = vertices.Count;
+        // Probe 4 cardinal direction bounds around center hit
+        Vector3[] checkDirs = new Vector3[] { rotTangent, -rotTangent, rotBitangent, -rotBitangent };
+        bool foundCorner = false;
+        Vector3 adjacentNormal = Vector3.zero;
+        Vector3 cornerEdgePoint = Vector3.zero;
+        Vector3 splitDir = Vector3.zero;
 
-        // 4 Quad vertices
-        vertices.Add(offsetPos - rotTangent - rotBitangent);
-        vertices.Add(offsetPos + rotTangent - rotBitangent);
-        vertices.Add(offsetPos + rotTangent + rotBitangent);
-        vertices.Add(offsetPos - rotTangent + rotBitangent);
-
-        for (int i = 0; i < 4; i++)
+        foreach (Vector3 dir in checkDirs)
         {
-            normals.Add(normal);
-            colors.Add(color);
+            Vector3 probeStart = offsetPos + dir;
+            // Raycast backward perpendicular to current surface to look for an overhang or adjacent wall/floor
+            if (Physics.Raycast(probeStart, dir.normalized, out RaycastHit cornerHit, cornerSearchDistance, environmentMask))
+            {
+                // Verify we hit a different face (angle difference near 90 degrees)
+                if (Vector3.Dot(normal, cornerHit.normal) < 0.3f)
+                {
+                    foundCorner = true;
+                    adjacentNormal = cornerHit.normal;
+                    cornerEdgePoint = cornerHit.point;
+                    splitDir = dir.normalized;
+                    break;
+                }
+            }
         }
 
-        // UV Atlas (2x2 grid of 4 variants)
-        if (variant < 0 || variant > 3)
-        {
-            variant = Random.Range(0, 4);
-        }
-
+        if (variant < 0 || variant > 3) variant = Random.Range(0, 4);
         float uMin = (variant % 2) * 0.5f;
         float uMax = uMin + 0.5f;
         float vMin = (variant / 2) * 0.5f;
         float vMax = vMin + 0.5f;
 
-        uvs.Add(new Vector2(uMin, vMin));
-        uvs.Add(new Vector2(uMax, vMin));
-        uvs.Add(new Vector2(uMax, vMax));
-        uvs.Add(new Vector2(uMin, vMax));
+        if (foundCorner)
+        {
+            // --- CONSTRUCT 6-VERTEX BENT RIBBON ---
+            int startIndex = vertices.Count;
 
-        // Two triangles
-        triangles.Add(startIndex + 0);
-        triangles.Add(startIndex + 1);
-        triangles.Add(startIndex + 2);
+            Vector3 perpDir = Vector3.Cross(normal, splitDir).normalized * radius;
+            Vector3 adjOffset = adjacentNormal * 0.004f;
 
-        triangles.Add(startIndex + 0);
-        triangles.Add(startIndex + 2);
-        triangles.Add(startIndex + 3);
+            // Surface 1 (Primary face)
+            Vector3 v0 = offsetPos - splitDir * radius - perpDir;
+            Vector3 v1 = offsetPos - splitDir * radius + perpDir;
+
+            // Seam (Corner edge)
+            Vector3 v2 = cornerEdgePoint + normal * 0.004f - perpDir;
+            Vector3 v3 = cornerEdgePoint + normal * 0.004f + perpDir;
+
+            // Surface 2 (Folded face)
+            Vector3 v4 = cornerEdgePoint + adjOffset + splitDir * radius - perpDir;
+            Vector3 v5 = cornerEdgePoint + adjOffset + splitDir * radius + perpDir;
+
+            vertices.Add(v0); vertices.Add(v1);
+            vertices.Add(v2); vertices.Add(v3);
+            vertices.Add(v4); vertices.Add(v5);
+
+            normals.Add(normal); normals.Add(normal);
+            normals.Add(normal); normals.Add(normal);
+            normals.Add(adjacentNormal); normals.Add(adjacentNormal);
+
+            for (int i = 0; i < 6; i++) colors.Add(color);
+
+            // Remap UVs continuously across both mesh segments
+            uvs.Add(new Vector2(uMin, vMin));
+            uvs.Add(new Vector2(uMax, vMin));
+            uvs.Add(new Vector2(uMin, vMin + 0.25f));
+            uvs.Add(new Vector2(uMax, vMin + 0.25f));
+            uvs.Add(new Vector2(uMin, vMax));
+            uvs.Add(new Vector2(uMax, vMax));
+
+            // Quad 1
+            triangles.Add(startIndex + 0); triangles.Add(startIndex + 1); triangles.Add(startIndex + 2);
+            triangles.Add(startIndex + 1); triangles.Add(startIndex + 3); triangles.Add(startIndex + 2);
+
+            // Quad 2 (Folded over corner)
+            triangles.Add(startIndex + 2); triangles.Add(startIndex + 3); triangles.Add(startIndex + 4);
+            triangles.Add(startIndex + 3); triangles.Add(startIndex + 5); triangles.Add(startIndex + 4);
+
+            totalVerticesCount += 6;
+        }
+        else
+        {
+            // --- STANDARD 4-VERTEX QUAD ---
+            int startIndex = vertices.Count;
+
+            vertices.Add(offsetPos - rotTangent - rotBitangent);
+            vertices.Add(offsetPos + rotTangent - rotBitangent);
+            vertices.Add(offsetPos + rotTangent + rotBitangent);
+            vertices.Add(offsetPos - rotTangent + rotBitangent);
+
+            for (int i = 0; i < 4; i++)
+            {
+                normals.Add(normal);
+                colors.Add(color);
+            }
+
+            uvs.Add(new Vector2(uMin, vMin));
+            uvs.Add(new Vector2(uMax, vMin));
+            uvs.Add(new Vector2(uMax, vMax));
+            uvs.Add(new Vector2(uMin, vMax));
+
+            triangles.Add(startIndex + 0); triangles.Add(startIndex + 1); triangles.Add(startIndex + 2);
+            triangles.Add(startIndex + 0); triangles.Add(startIndex + 2); triangles.Add(startIndex + 3);
+
+            totalVerticesCount += 4;
+        }
 
         totalSplatsCount++;
-        totalVerticesCount += 4;
         isBatchDirty = true;
     }
 
-    /// <summary>
-    /// Uploads all buffered splatters to the GPU in a single efficient call.
-    /// </summary>
     public void Commit()
     {
         if (!isBatchDirty || batchedMesh == null) return;
@@ -181,9 +254,6 @@ public class PaintDecalBatcher : MonoBehaviour
         isBatchDirty = false;
     }
 
-    /// <summary>
-    /// Clears all permanent splatters from the scene if needed.
-    /// </summary>
     public void ClearAll()
     {
         vertices.Clear();
@@ -194,16 +264,10 @@ public class PaintDecalBatcher : MonoBehaviour
         totalSplatsCount = 0;
         totalVerticesCount = 0;
 
-        if (batchedMesh != null)
-        {
-            batchedMesh.Clear();
-        }
+        if (batchedMesh != null) batchedMesh.Clear();
         isBatchDirty = false;
     }
 
-    /// <summary>
-    /// Generates a 512x512 texture containing 4 organic paint splatter variations in a 2x2 grid.
-    /// </summary>
     private Texture2D GenerateProceduralAtlas()
     {
         int size = 512;
@@ -228,7 +292,6 @@ public class PaintDecalBatcher : MonoBehaviour
             int seed = q * 100 + 42;
             Random.InitState(seed);
 
-            // Droplet positions for this quadrant
             int dropletCount = Random.Range(7, 14);
             Vector2[] dropletCenters = new Vector2[dropletCount];
             float[] dropletRadii = new float[dropletCount];
@@ -250,7 +313,6 @@ public class PaintDecalBatcher : MonoBehaviour
                     float dist = Mathf.Sqrt(dx * dx + dy * dy);
                     float theta = Mathf.Atan2(dy, dx);
 
-                    // Organic wavy shape
                     float wave = Mathf.Sin(theta * 5f + seed) * 0.18f +
                                  Mathf.Cos(theta * 7f - seed * 2f) * 0.12f +
                                  Mathf.Sin(theta * 11f) * 0.08f;
@@ -262,7 +324,6 @@ public class PaintDecalBatcher : MonoBehaviour
                         alpha = Mathf.Clamp01((organicRadius - dist) * 1.5f);
                     }
 
-                    // Satellite droplets
                     for (int d = 0; d < dropletCount; d++)
                     {
                         float dDist = Vector2.Distance(new Vector2(x, y), dropletCenters[d]);
@@ -280,7 +341,7 @@ public class PaintDecalBatcher : MonoBehaviour
         }
 
         tex.SetPixels(pixels);
-        tex.Apply(false, true); // make non-readable to free CPU RAM
+        tex.Apply(false, true);
         return tex;
     }
 }

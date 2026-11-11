@@ -3,6 +3,7 @@ Shader "Custom/PaintSplatter"
     Properties
     {
         _MainTex ("Splatter Texture", 2D) = "white" {}
+        _DepthThreshold ("Edge Clip Sensitivity", Range(0.01, 1.0)) = 0.2
     }
 
     SubShader
@@ -30,6 +31,7 @@ Shader "Custom/PaintSplatter"
             #pragma fragment frag
 
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
+            #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/DeclareDepthTexture.hlsl"
 
             struct Attributes
             {
@@ -43,6 +45,7 @@ Shader "Custom/PaintSplatter"
                 float4 positionCS   : SV_POSITION;
                 float4 color        : COLOR;
                 float2 uv           : TEXCOORD0;
+                float4 screenPos    : TEXCOORD1;
             };
 
             TEXTURE2D(_MainTex);
@@ -50,22 +53,44 @@ Shader "Custom/PaintSplatter"
 
             CBUFFER_START(UnityPerMaterial)
                 float4 _MainTex_ST;
+                float _DepthThreshold;
             CBUFFER_END
 
             Varyings vert(Attributes input)
             {
                 Varyings output;
-                output.positionCS = TransformObjectToHClip(input.positionOS.xyz);
+                VertexPositionInputs vertexInput = GetVertexPositionInputs(input.positionOS.xyz);
+                
+                output.positionCS = vertexInput.positionCS;
                 output.uv = TRANSFORM_TEX(input.uv, _MainTex);
                 output.color = input.color;
+                output.screenPos = ComputeScreenPos(vertexInput.positionCS);
+
                 return output;
             }
 
             half4 frag(Varyings input) : SV_Target
             {
+                // Calculate Normalized Screen Coordinates for Depth Lookup
+                float2 screenUV = input.screenPos.xy / input.screenPos.w;
+
+                // Sample the scene's actual depth buffer behind this pixel
+                float rawDepth = SampleSceneDepth(screenUV);
+                float sceneLinearDepth = LinearEyeDepth(rawDepth, _ZBufferParams);
+
+                // Calculate the decal quad fragment's depth
+                float decalLinearDepth = input.screenPos.w;
+
+                // Edge Overhang Check: If the difference between the quad and the actual background 
+                // geometry is too large, the quad is hanging off into empty space / further background.
+                float depthDifference = abs(sceneLinearDepth - decalLinearDepth);
+                clip(_DepthThreshold - depthDifference);
+
+                // Normal texture and color blending
                 half4 tex = SAMPLE_TEXTURE2D(_MainTex, sampler_MainTex, input.uv);
                 half4 col = input.color;
                 col.a *= tex.a;
+
                 return col;
             }
             ENDHLSL

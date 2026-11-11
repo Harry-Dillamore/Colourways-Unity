@@ -53,6 +53,7 @@ public class PaintExplosionSystem : MonoBehaviour
     private CharacterController characterController;
     private Renderer[] playerRenderers;
     private ParticleSystem proceduralParticles;
+    private ParticleDecalListener particleDecalListener;
     private Material playerMaterialInstance;
 
     private void Awake()
@@ -71,9 +72,16 @@ public class PaintExplosionSystem : MonoBehaviour
         SetupProceduralParticleSystem();
     }
 
+    private void OnDestroy()
+    {
+        if (playerMaterialInstance != null)
+        {
+            Destroy(playerMaterialInstance);
+        }
+    }
+
     private void SetupPlayerColorVisual()
     {
-        // Give player a tinted material so they match the paint color
         Renderer mainRenderer = GetComponent<Renderer>();
         if (mainRenderer != null)
         {
@@ -99,6 +107,10 @@ public class PaintExplosionSystem : MonoBehaviour
         pObj.transform.localPosition = Vector3.zero;
 
         proceduralParticles = pObj.AddComponent<ParticleSystem>();
+        particleDecalListener = pObj.AddComponent<ParticleDecalListener>();
+
+        proceduralParticles.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
+
         var main = proceduralParticles.main;
         main.playOnAwake = false;
         main.loop = false;
@@ -116,6 +128,14 @@ public class PaintExplosionSystem : MonoBehaviour
         shape.shapeType = ParticleSystemShapeType.Sphere;
         shape.radius = 0.3f;
 
+        var collision = proceduralParticles.collision;
+        collision.enabled = true;
+        collision.type = ParticleSystemCollisionType.World;
+        collision.mode = ParticleSystemCollisionMode.Collision3D;
+        collision.sendCollisionMessages = true;
+        collision.bounce = 0.0f;
+        collision.lifetimeLoss = 1.0f;
+
         var pRenderer = pObj.GetComponent<ParticleSystemRenderer>();
         Shader particleShader = Shader.Find("Universal Render Pipeline/Particles/Unlit");
         if (particleShader == null) particleShader = Shader.Find("Particles/Standard Unlit");
@@ -125,9 +145,6 @@ public class PaintExplosionSystem : MonoBehaviour
         }
     }
 
-    /// <summary>
-    /// Triggers the full paint explosion: generates permanent splatters, bursts particles, hides player, and respawns.
-    /// </summary>
     public void Explode(Vector3 impactPoint, Vector3 impactNormal, Vector3 moveDirection)
     {
         if (IsExploding) return;
@@ -139,12 +156,17 @@ public class PaintExplosionSystem : MonoBehaviour
         IsExploding = true;
         Color explosionColor = CurrentPaintColor;
 
-        // 1. Permanently add splatters to PaintDecalBatcher
+        // 1. Spawn corner-wrapping volume decals via PaintDecalSpawner
         GeneratePaintSplodges(impactPoint, impactNormal, explosionColor);
 
-        // 2. Play particle burst
+        // 2. Play particle burst & pass color to collision listener
         if (proceduralParticles != null)
         {
+            if (particleDecalListener != null)
+            {
+                particleDecalListener.ParticleColor = explosionColor;
+            }
+
             var main = proceduralParticles.main;
             main.startColor = explosionColor;
             proceduralParticles.transform.position = impactPoint + impactNormal * 0.1f;
@@ -157,22 +179,35 @@ public class PaintExplosionSystem : MonoBehaviour
             AudioSource.PlayClipAtPoint(explosionSound, impactPoint, 1.0f);
         }
 
-        // 4. Trigger camera shake if camera exists
+        // 4. Trigger camera shake
         if (playerController != null && playerController.playerCamera != null)
         {
             StartCoroutine(CameraShakeRoutine(playerController.playerCamera));
         }
 
-        // 5. Hide player visual and disable character controller movement
+        // 5. Hide player visual and disable movement
         SetPlayerVisualVisible(false);
-        characterController.enabled = false;
+        if (characterController != null)
+        {
+            characterController.enabled = false;
+        }
 
         // 6. Wait for respawn delay
         yield return new WaitForSeconds(respawnDelay);
 
-        // 7. Respawn player at spawn position
+        // 7. Teleport & sync physics before enabling controller
         transform.position = spawnPosition;
-        characterController.enabled = true;
+        Physics.SyncTransforms();
+
+        if (playerController != null)
+        {
+            playerController.ResetMovementState();
+        }
+
+        if (characterController != null)
+        {
+            characterController.enabled = true;
+        }
 
         // 8. Cycle to next vibrant color
         colorIndex = (colorIndex + 1) % paintColors.Length;
@@ -187,37 +222,32 @@ public class PaintExplosionSystem : MonoBehaviour
 
     private void GeneratePaintSplodges(Vector3 impactPoint, Vector3 impactNormal, Color color)
     {
-        PaintDecalBatcher batcher = PaintDecalBatcher.Instance;
-        if (batcher == null) return;
+        PaintDecalSpawner spawner = PaintDecalSpawner.Instance;
+        if (spawner == null) return;
 
-        Color32 col32 = color;
+        // Primary Impact Splodge on wall
+        spawner.SpawnDecal(impactPoint, impactNormal, mainSplatRadius * Random.Range(0.9f, 1.2f), color);
 
-        // A. Primary Impact Splodge on the wall
-        batcher.AddSplatter(impactPoint, impactNormal, mainSplatRadius * Random.Range(0.9f, 1.2f), col32, 0);
-
-        // B. Floor Puddle directly below player
+        // Floor Puddle directly below player
         Vector3 floorOrigin = transform.position + Vector3.up * 0.2f;
         if (Physics.Raycast(floorOrigin, Vector3.down, out RaycastHit floorHit, 4.0f))
         {
-            batcher.AddSplatter(floorHit.point, floorHit.normal, floorPuddleRadius * Random.Range(0.85f, 1.25f), col32, 3);
+            spawner.SpawnDecal(floorHit.point, floorHit.normal, floorPuddleRadius * Random.Range(0.85f, 1.25f), color);
         }
 
-        // C. Radial Spray onto surrounding walls, ceiling and floor
+        // Radial Raycast Spray onto surrounding surfaces
         Vector3 blastOrigin = impactPoint + impactNormal * 0.15f;
         int raysCast = splatterRayCount;
 
         for (int i = 0; i < raysCast; i++)
         {
-            // Hemispherical / spherical spray directions favoring bounce normal and downward spread
             Vector3 randomDir = Random.onUnitSphere;
 
-            // Bias towards bounce normal (reflection of impact)
             if (Vector3.Dot(randomDir, impactNormal) < -0.2f)
             {
                 randomDir = Vector3.Reflect(randomDir, impactNormal);
             }
 
-            // Also add downward bias so floor gets abundant splashes
             if (Random.value < 0.45f)
             {
                 randomDir = Vector3.Lerp(randomDir, Vector3.down, Random.Range(0.3f, 0.8f)).normalized;
@@ -225,29 +255,23 @@ public class PaintExplosionSystem : MonoBehaviour
 
             if (Physics.Raycast(blastOrigin, randomDir, out RaycastHit hit, maxSprayDistance))
             {
-                // Don't splat on player itself
                 if (hit.collider.transform == transform || hit.collider.transform.IsChildOf(transform))
                 {
                     continue;
                 }
 
-                // Size decreases with distance from impact
                 float distanceRatio = 1.0f - (hit.distance / maxSprayDistance);
                 float radius = Mathf.Lerp(minDropletRadius, maxDropletRadius, distanceRatio) * Random.Range(0.7f, 1.3f);
 
-                // Slight color tint variance (+/- 8%) for visual realism
-                Color32 dropletColor = col32;
+                Color dropletColor = color;
                 float tintVar = Random.Range(-0.06f, 0.06f);
-                dropletColor.r = (byte)Mathf.Clamp(col32.r + (tintVar * 255f), 0, 255);
-                dropletColor.g = (byte)Mathf.Clamp(col32.g + (tintVar * 255f), 0, 255);
-                dropletColor.b = (byte)Mathf.Clamp(col32.b + (tintVar * 255f), 0, 255);
+                dropletColor.r = Mathf.Clamp01(color.r + tintVar);
+                dropletColor.g = Mathf.Clamp01(color.g + tintVar);
+                dropletColor.b = Mathf.Clamp01(color.b + tintVar);
 
-                batcher.AddSplatter(hit.point, hit.normal, radius, dropletColor);
+                spawner.SpawnDecal(hit.point, hit.normal, radius, dropletColor);
             }
         }
-
-        // Commit all splodges to the batched mesh in one efficient call (1 draw call total!)
-        batcher.Commit();
     }
 
     private void SetPlayerVisualVisible(bool visible)
@@ -263,18 +287,17 @@ public class PaintExplosionSystem : MonoBehaviour
 
     private IEnumerator CameraShakeRoutine(Transform cam)
     {
-        Vector3 originalLocalPos = cam.localPosition;
+        Vector3 basePos = cam.localPosition;
         float elapsed = 0f;
 
         while (elapsed < cameraShakeDuration)
         {
             float damper = 1.0f - (elapsed / cameraShakeDuration);
-            Vector3 offset = Random.insideUnitSphere * (cameraShakeMagnitude * damper);
-            cam.localPosition = originalLocalPos + offset;
+            cam.localPosition = basePos + Random.insideUnitSphere * (cameraShakeMagnitude * damper);
             elapsed += Time.deltaTime;
             yield return null;
         }
 
-        cam.localPosition = originalLocalPos;
+        cam.localPosition = basePos;
     }
 }
