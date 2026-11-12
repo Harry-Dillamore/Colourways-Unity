@@ -1,0 +1,45 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!21 &2100000
+Material:
+  serializedVersion: 8
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_Name: M_PaintableSurface
+  m_Shader: {fileID: 4800000, guid: 640bb70521132a54e8822b8de6facb39, type: 3}
+  m_Parent: {fileID: 0}
+  m_ModifiedSerializedProperties: 0
+  m_ValidKeywords:
+  - _HALFTONE
+  - _PAINTABLE
+  m_InvalidKeywords: []
+  m_LightmapFlags: 4
+  m_EnableInstancingVariants: 0
+  m_DoubleSidedGI: 0
+  m_CustomRenderQueue: -1
+  stringTagMap: {}
+  disabledShaderPasses: []
+  m_LockedProperties: 
+  m_SavedProperties:
+    serializedVersion: 3
+    m_TexEnvs: []
+    m_Ints: []
+    m_Floats:
+    - _DotScale: 6
+    - _DotShade: 0.62
+    - _Halftone: 1
+    - _HatchStart: 0.7
+    - _LightMix: 1
+    - _OutlineWidth: 0.02
+    - _Paintable: 1
+    - _ShadeAmount: 0.9
+    - _UnpaintedShade: 0
+    m_Colors:
+    - _BaseColor: {r: 1, g: 1, b: 1, a: 1}
+    - _LightDir: {r: -0.45, g: 0.85, b: -0.35, a: 0}
+    - _OutlineColor: {r: 0.06999998, g: 0.06999998, b: 0.089999996, a: 1}
+    - _UnpaintedInk: {r: 0.74, g: 0.6399999, b: 0.92, a: 1}
+  m_BuildTextureStacks: []
+  m_AllowLocking: 1

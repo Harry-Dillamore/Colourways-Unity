@@ -1,0 +1,88 @@
+{
+    "name": "ColourWaysControls",
+    "maps": [
+        {
+            "name": "Player",
+            "id": "6f1c2d1e-3a4b-4c5d-8e9f-0a1b2c3d4e01",
+            "actions": [
+                {
+                    "name": "Move",
+                    "type": "Value",
+                    "id": "6f1c2d1e-3a4b-4c5d-8e9f-0a1b2c3d4e02",
+                    "expectedControlType": "Vector2",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": true
+                },
+                {
+                    "name": "Look",
+                    "type": "Value",
+                    "id": "6f1c2d1e-3a4b-4c5d-8e9f-0a1b2c3d4e03",
+                    "expectedControlType": "Vector2",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": false
+                },
+                {
+                    "name": "LookStick",
+                    "type": "Value",
+                    "id": "6f1c2d1e-3a4b-4c5d-8e9f-0a1b2c3d4e04",
+                    "expectedControlType": "Vector2",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": true
+                },
+                {
+                    "name": "Jump",
+                    "type": "Button",
+                    "id": "6f1c2d1e-3a4b-4c5d-8e9f-0a1b2c3d4e05",
+                    "expectedControlType": "Button",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": false
+                },
+                {
+                    "name": "Sprint",
+                    "type": "Button",
+                    "id": "6f1c2d1e-3a4b-4c5d-8e9f-0a1b2c3d4e06",
+                    "expectedControlType": "Button",
+                    "processors": "",
+                    "interactions": "",
+                    "initialStateCheck": false
+                },
+                {
+                    "name": "Restart",
+                    "type": "Button",
+                    "id": "6f1c2d1e-3a4b-4c5d-8e9f-0a1b2c3d4e07",
+                    "expectedControlType": "Button",
+                    "processors": "",
+                    "interactions": "Hold(duration=0.75)",
+                    "initialStateCheck": false
+                }
+            ],
+            "bindings": [
+                { "name": "WASD", "id": "7a2b3c4d-5e6f-4a1b-9c2d-3e4f5a6b7c01", "path": "2DVector", "interactions": "", "processors": "", "groups": "", "action": "Move", "isComposite": true, "isPartOfComposite": false },
+                { "name": "up", "id": "7a2b3c4d-5e6f-4a1b-9c2d-3e4f5a6b7c02", "path": "<Keyboard>/w", "interactions": "", "processors": "", "groups": "", "action": "Move", "isComposite": false, "isPartOfComposite": true },
+                { "name": "down", "id": "7a2b3c4d-5e6f-4a1b-9c2d-3e4f5a6b7c03", "path": "<Keyboard>/s", "interactions": "", "processors": "", "groups": "", "action": "Move", "isComposite": false, "isPartOfComposite": true },
+                { "name": "left", "id": "7a2b3c4d-5e6f-4a1b-9c2d-3e4f5a6b7c04", "path": "<Keyboard>/a", "interactions": "", "processors": "", "groups": "", "action": "Move", "isComposite": false, "isPartOfComposite": true },
+                { "name": "right", "id": "7a2b3c4d-5e6f-4a1b-9c2d-3e4f5a6b7c05", "path": "<Keyboard>/d", "interactions": "", "processors": "", "groups": "", "action": "Move", "isComposite": false, "isPartOfComposite": true },
+                { "name": "Arrows", "id": "7a2b3c4d-5e6f-4a1b-9c2d-3e4f5a6b7c06", "path": "2DVector", "interactions": "", "processors": "", "groups": "", "action": "Move", "isComposite": true, "isPartOfComposite": false },
+                { "name": "up", "id": "7a2b3c4d-5e6f-4a1b-9c2d-3e4f5a6b7c07", "path": "<Keyboard>/upArrow", "interactions": "", "processors": "", "groups": "", "action": "Move", "isComposite": false, "isPartOfComposite": true },
+                { "name": "down", "id": "7a2b3c4d-5e6f-4a1b-9c2d-3e4f5a6b7c08", "path": "<Keyboard>/downArrow", "interactions": "", "processors": "", "groups": "", "action": "Move", "isComposite": false, "isPartOfComposite": true },
+                { "name": "left", "id": "7a2b3c4d-5e6f-4a1b-9c2d-3e4f5a6b7c09", "path": "<Keyboard>/leftArrow", "interactions": "", "processors": "", "groups": "", "action": "Move", "isComposite": false, "isPartOfComposite": true },
+                { "name": "right", "id": "7a2b3c4d-5e6f-4a1b-9c2d-3e4f5a6b7c0a", "path": "<Keyboard>/rightArrow", "interactions": "", "processors": "", "groups": "", "action": "Move", "isComposite": false, "isPartOfComposite": true },
+                { "name": "", "id": "7a2b3c4d-5e6f-4a1b-9c2d-3e4f5a6b7c0b", "path": "<Gamepad>/leftStick", "interactions": "", "processors": "stickDeadzone", "groups": "", "action": "Move", "isComposite": false, "isPartOfComposite": false },
+                { "name": "", "id": "7a2b3c4d-5e6f-4a1b-9c2d-3e4f5a6b7c0c", "path": "<Mouse>/delta", "interactions": "", "processors": "", "groups": "", "action": "Look", "isComposite": false, "isPartOfComposite": false },
+                { "name": "", "id": "7a2b3c4d-5e6f-4a1b-9c2d-3e4f5a6b7c0d", "path": "<Gamepad>/rightStick", "interactions": "", "processors": "stickDeadzone", "groups": "", "action": "LookStick", "isComposite": false, "isPartOfComposite": false },
+                { "name": "", "id": "7a2b3c4d-5e6f-4a1b-9c2d-3e4f5a6b7c0e", "path": "<Keyboard>/space", "interactions": "", "processors": "", "groups": "", "action": "Jump", "isComposite": false, "isPartOfComposite": false },
+                { "name": "", "id": "7a2b3c4d-5e6f-4a1b-9c2d-3e4f5a6b7c0f", "path": "<Gamepad>/buttonSouth", "interactions": "", "processors": "", "groups": "", "action": "Jump", "isComposite": false, "isPartOfComposite": false },
+                { "name": "", "id": "7a2b3c4d-5e6f-4a1b-9c2d-3e4f5a6b7c10", "path": "<Keyboard>/leftShift", "interactions": "", "processors": "", "groups": "", "action": "Sprint", "isComposite": false, "isPartOfComposite": false },
+                { "name": "", "id": "7a2b3c4d-5e6f-4a1b-9c2d-3e4f5a6b7c11", "path": "<Gamepad>/leftStickPress", "interactions": "", "processors": "", "groups": "", "action": "Sprint", "isComposite": false, "isPartOfComposite": false },
+                { "name": "", "id": "7a2b3c4d-5e6f-4a1b-9c2d-3e4f5a6b7c12", "path": "<Gamepad>/rightTrigger", "interactions": "", "processors": "", "groups": "", "action": "Sprint", "isComposite": false, "isPartOfComposite": false },
+                { "name": "", "id": "7a2b3c4d-5e6f-4a1b-9c2d-3e4f5a6b7c13", "path": "<Keyboard>/r", "interactions": "", "processors": "", "groups": "", "action": "Restart", "isComposite": false, "isPartOfComposite": false },
+                { "name": "", "id": "7a2b3c4d-5e6f-4a1b-9c2d-3e4f5a6b7c14", "path": "<Gamepad>/select", "interactions": "", "processors": "", "groups": "", "action": "Restart", "isComposite": false, "isPartOfComposite": false }
+            ]
+        }
+    ],
+    "controlSchemes": []
+}
