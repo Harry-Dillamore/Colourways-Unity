@@ -1,3 +1,4 @@
+using System;
 using ColourWays.Paint;
 using UnityEngine;
 
@@ -24,6 +25,9 @@ namespace ColourWays.Player
         [SerializeField] private float probeHeight = 0.3f;
         [SerializeField] private float probeDistance = 0.6f;
         [SerializeField] private LayerMask paintMask = ~0;
+
+        /// <summary>Raised when a footstep lands: (foot 0=left/1=right, world contact point, size scale).</summary>
+        public event Action<int, Vector3, float> Footstepped;
 
         /// <summary>0..1 over a full two-step cycle. Left foot plants at 0, right at 0.5.</summary>
         public float StridePhase => _cycle / (strideLength * 2f);
@@ -98,14 +102,16 @@ namespace ColourWays.Player
         /// <summary>Stamp a footprint under a foot (0 = left, 1 = right).</summary>
         public void Step(int foot, float sizeScale)
         {
-            var paint = PaintManager.Instance;
-            if (paint == null) return;
-
             Vector3 side = transform.right * (foot == 0 ? -footSpacing : footSpacing);
             Vector3 origin = transform.position + side + transform.forward * footForwardOffset + Vector3.up * probeHeight;
 
             if (Physics.Raycast(origin, Vector3.down, out RaycastHit hit, probeHeight + probeDistance, paintMask, QueryTriggerInteraction.Ignore))
-                paint.Paint(hit.point + hit.normal * 0.01f, hit.normal, footprintRadius * sizeScale, BrushShape.Round);
+            {
+                var paint = PaintManager.Instance;
+                if (paint != null)
+                    paint.Paint(hit.point + hit.normal * 0.01f, hit.normal, footprintRadius * sizeScale, BrushShape.Round);
+                Footstepped?.Invoke(foot, hit.point, sizeScale);
+            }
         }
     }
 }

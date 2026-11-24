@@ -1,0 +1,118 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 214fc6d74e75d9a4d93352809e128695, type: 3}
+  m_Name: AudioConfig
+  m_EditorClassIdentifier: Assembly-CSharp::ColourWays.Audio.AudioConfig
+  mainMusic:
+    Guid:
+      Data1: -388353995
+      Data2: 1327865537
+      Data3: 513458090
+      Data4: -292954926
+    Path: event:/Music/MainTheme
+  pauseSnapshot:
+    Guid:
+      Data1: 0
+      Data2: 0
+      Data3: 0
+      Data4: 0
+    Path: 
+  footstep:
+    Guid:
+      Data1: -1601253103
+      Data2: 1105523171
+      Data3: -117468993
+      Data4: -1472784818
+    Path: event:/SFX/Player/Footstep
+  wallSplat:
+    Guid:
+      Data1: -184486029
+      Data2: 1252984532
+      Data3: 1854807182
+      Data4: 81696324
+    Path: event:/SFX/Player/WallSplat
+  land:
+    Guid:
+      Data1: 558879740
+      Data2: 1156531737
+      Data3: -105269827
+      Data4: 1409036419
+    Path: event:/SFX/Player/Land
+  jump:
+    Guid:
+      Data1: 0
+      Data2: 0
+      Data3: 0
+      Data4: 0
+    Path: 
+  respawn:
+    Guid:
+      Data1: -431360558
+      Data2: 1332089187
+      Data3: 775226780
+      Data4: -1362145201
+    Path: event:/SFX/Player/Respawn
+  paintBlobCollect:
+    Guid:
+      Data1: 186026211
+      Data2: 1234924383
+      Data3: -1402811975
+      Data4: 1022514014
+    Path: event:/SFX/World/PaintBlobCollect
+  levelComplete:
+    Guid:
+      Data1: 2022943747
+      Data2: 1186552815
+      Data3: 1759163316
+      Data4: -1952649819
+    Path: event:/SFX/World/LevelComplete
+  uiHover:
+    Guid:
+      Data1: 1620625516
+      Data2: 1316546132
+      Data3: 1821918132
+      Data4: 1544277630
+    Path: event:/SFX/UI/Hover
+  uiClick:
+    Guid:
+      Data1: -1883565760
+      Data2: 1341800731
+      Data3: -902366297
+      Data4: 1479312354
+    Path: event:/SFX/UI/Click
+  sceneTransition:
+    Guid:
+      Data1: -1250919998
+      Data2: 1238101178
+      Data3: 520068522
+      Data4: -249709152
+    Path: event:/SFX/UI/Transition
+  allowPathFallback: 1
+  mainMusicPath: event:/Music/MainTheme
+  pauseSnapshotPath: snapshot:/Pause
+  footstepPath: event:/SFX/Player/Footstep
+  wallSplatPath: event:/SFX/Player/WallSplat
+  landPath: event:/SFX/Player/Land
+  jumpPath: event:/SFX/Player/Jump
+  respawnPath: event:/SFX/Player/Respawn
+  paintBlobCollectPath: event:/SFX/World/PaintBlobCollect
+  levelCompletePath: event:/SFX/World/LevelComplete
+  uiHoverPath: event:/SFX/UI/Hover
+  uiClickPath: event:/SFX/UI/Click
+  sceneTransitionPath: event:/SFX/UI/Transition
+  paramIsInLevel: IsInLevel
+  paramPlayerSpeed: PlayerSpeed
+  paramPaused: Paused
+  paramImpactSpeed: ImpactSpeed
+  logEventsToConsole: 1
+  enableCsvTelemetry: 1
+  showDebugOverlayOnStart: 0

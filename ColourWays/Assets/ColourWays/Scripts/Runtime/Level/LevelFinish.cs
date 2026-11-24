@@ -1,3 +1,4 @@
+using System;
 using System.Collections;
 using ColourWays.Player;
 using UnityEngine;
@@ -33,6 +34,12 @@ namespace ColourWays.Level
         [SerializeField] private Button menuButton;
         [SerializeField] private UnityEvent onFinished = new UnityEvent();
 
+        /// <summary>Raised whenever any level finish trigger is reached.</summary>
+        public static event Action<LevelFinish> AnyLevelFinished;
+
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void ResetStatics() => AnyLevelFinished = null;
+
         public bool IsFinished { get; private set; }
 
         private void Reset()
@@ -67,6 +74,7 @@ namespace ColourWays.Level
         {
             player.InputEnabled = false;
             onFinished.Invoke();
+            AnyLevelFinished?.Invoke(this);
 
             // Pan up above the level to look at the paint.
             var rig = player.CameraRig;

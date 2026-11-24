@@ -36,6 +36,12 @@ namespace ColourWays.Level
         [SerializeField] private float wobble = 0.08f;
         [SerializeField] private float orbitSpeed = 70f;
 
+        /// <summary>Raised whenever any PaintBlob in the scene is collected by the player.</summary>
+        public static event System.Action<PaintBlob> AnyCollected;
+
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void ResetStatics() => AnyCollected = null;
+
         public Color Colour => colour;
         public bool Collected { get; private set; }
 
@@ -122,6 +128,7 @@ namespace ColourWays.Level
             var emitter = player.GetComponentInChildren<PaintSplatEmitter>();
             if (emitter != null) emitter.BigSplash(transform.position, colour, droplets, splashRadius);
             player.SetCheckpoint(transform.position, player.transform.eulerAngles.y);
+            AnyCollected?.Invoke(this);
         }
 
         private void OnDrawGizmos()

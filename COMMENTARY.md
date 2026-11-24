@@ -1,0 +1,11 @@
+# Technical Commentary — FMOD Studio Audio Middleware Integration
+
+I integrated FMOD Studio 2.03.15 and FMOD for Unity 2.03.15 into the ColourWays project built in Unity. I disabled Unity's default `AudioManager` to avoid conflict with FMOD's audio engine. I replaced Unity's `AudioListener` components with FMOD's `StudioListener` components, setting the player's `StudioListener` attenuation object to the player root so that distance attenuation is measured from the player's position rather than the camera's, as we use a high overhead camera angle that would otherwise make sounds artificially quiet and distant. I looked into how to set up FMOD calls and found that putting them directly into gameplay scripts becomes messy by mixing audio and gameplay logic. Instead, the approach I used is to broadcast C# events from gameplay scripts when something should play a sound, while a central `ColourWaysAudioManager` listens for those events and triggers FMOD. Additionally, `ColourWaysAudioManager` persists across scene loads (`DontDestroyOnLoad`), meaning the background music does not abruptly cut off or restart when loading a new scene.
+
+I created 10 FMOD events in the `Master` bank, including `MainTheme`, `Footstep`, `Hover`, and `Respawn`. I set up `MainTheme` to loop and automated a low-pass filter when the game is paused, which gives extra audio feedback to the player. I also added sound effects such as footsteps that randomise between 5 variations to stop frequently played sounds from becoming repetitive—using a Multi Instrument in FMOD Studio was useful here to add variations without any extra code. In-world gameplay SFX (`Footstep`, `Land`, `WallSplat`, and `PaintBlobCollect`) are 3D spatialised for a more immersive experience, while UI and feedback cues remain 2D. To confirm that the audio was working as intended, I used a custom `AudioTelemetry` logger to record `FMOD.RESULT` (alongside 3D distances, CPU, and memory) and verify that sounds were triggering cleanly.
+
+I created a standalone Windows build of the game, enabled the `AudioDebugOverlay` (`F9`), and played through the game to test all of the sounds and watch for errors. Doing this in a standalone build allowed me to catch errors that do not appear in the Unity Editor.
+
+![FMOD Events](image.png)
+
+![footstep](image-1.png)

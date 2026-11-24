@@ -1,3 +1,4 @@
+using System;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.UI;
@@ -22,6 +23,20 @@ namespace ColourWays.Level
             new Color(0.2f, 0.8f, 0.35f), new Color(0.1f, 0.62f, 1f), new Color(0.55f, 0.3f, 0.95f),
         };
         private static int _next;
+
+        /// <summary>Raised when any menu button is hovered or selected.</summary>
+        public static event Action AnyHovered;
+
+        /// <summary>Raised when any menu button is pressed.</summary>
+        public static event Action AnyPressed;
+
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        private static void ResetStatics()
+        {
+            AnyHovered = null;
+            AnyPressed = null;
+            _next = 0;
+        }
 
         private RectTransform _rect;
         private Vector2 _home;
@@ -48,6 +63,7 @@ namespace ColourWays.Level
             if (_target > 0f) return;
             _hoverColour = Paint[_next++ % Paint.Length];
             _target = 1f;
+            AnyHovered?.Invoke();
         }
 
         private void Exit() => _target = 0f;
@@ -56,7 +72,11 @@ namespace ColourWays.Level
         public void OnPointerExit(PointerEventData e) => Exit();
         public void OnSelect(BaseEventData e) => Enter();
         public void OnDeselect(BaseEventData e) => Exit();
-        public void OnPointerDown(PointerEventData e) => _press = 1f;
+        public void OnPointerDown(PointerEventData e)
+        {
+            _press = 1f;
+            AnyPressed?.Invoke();
+        }
         public void OnPointerUp(PointerEventData e) { }
 
         private void Update()

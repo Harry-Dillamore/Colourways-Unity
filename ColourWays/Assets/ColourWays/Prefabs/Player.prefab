@@ -10,10 +10,10 @@ GameObject:
   m_Component:
   - component: {fileID: 558376443795735995}
   - component: {fileID: 6978456339099487887}
-  - component: {fileID: 6763323510534875451}
   - component: {fileID: 1236557613167590212}
   - component: {fileID: 4755617661716202340}
   - component: {fileID: 8719405605832178792}
+  - component: {fileID: 2275025250423283230}
   m_Layer: 8
   m_Name: PlayerCamera
   m_TagString: MainCamera
@@ -87,14 +87,6 @@ Camera:
   m_OcclusionCulling: 1
   m_StereoConvergence: 10
   m_StereoSeparation: 0.022
---- !u!81 &6763323510534875451
-AudioListener:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 2253518060219980391}
-  m_Enabled: 1
 --- !u!114 &1236557613167590212
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -163,7 +155,7 @@ MonoBehaviour:
   probeRadius: 0.15
   collisionMask:
     serializedVersion: 2
-    m_Bits: 4294967039
+    m_Bits: 55
   controls: {fileID: -944628639613478452, guid: 183faba288590f74987224ff21f77ecc, type: 3}
   mouseSensitivity: 0.12
   stickSensitivity: 200
@@ -188,6 +180,20 @@ MonoBehaviour:
   lightColour: {r: 1, g: 1, b: 1, a: 1}
   darkColour: {r: 0, g: 0, b: 0, a: 1}
   transition: 0.45
+--- !u!114 &2275025250423283230
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 2253518060219980391}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 86c6556701af9e04380698b89f691b6e, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: FMODUnity::FMODUnity.StudioListener
+  nonRigidbodyVelocity: 0
+  attenuationObject: {fileID: 3161124142284104783}
 --- !u!1 &3161124142284104783
 GameObject:
   m_ObjectHideFlags: 0
@@ -309,7 +315,7 @@ MonoBehaviour:
   probeDistance: 0.6
   paintMask:
     serializedVersion: 2
-    m_Bits: 4294967039
+    m_Bits: 55
 --- !u!1 &6380666764977012090
 GameObject:
   m_ObjectHideFlags: 0

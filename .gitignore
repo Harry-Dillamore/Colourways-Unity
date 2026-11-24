@@ -112,3 +112,19 @@ InitTestScene*.unity*
 
 # Auto-generated cache in Assets folder
 /[Aa]ssets/[Ss]ceneDependencyCache*
+
+# IDE folders inside nested Unity project
+**/.vscode/
+**/.idea/
+
+# Standalone builds (keep out of Git; record media evidence in Media/)
+[Bb]uilds/
+
+# FMOD Studio transient & cache files (keep .fspro, Metadata/, and Assets/StreamingAssets/*.bank)
+FMODProject/**/.cache/
+FMODProject/**/.user/
+FMODProject/**/.unsaved/
+**/fmod.log
+**/fmod_editor.log
+**/FMODStudioCache.asset
+**/FMODStudioCache.asset.meta

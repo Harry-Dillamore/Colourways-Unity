@@ -27,6 +27,9 @@ namespace ColourWays.Level
 
         private static ScreenTransition _instance;
 
+        /// <summary>Raised when a paint screen transition begins loading the target scene.</summary>
+        public static event System.Action<string> TransitionStarted;
+
         /// <summary>True while a transition is running (ignore input meanwhile).</summary>
         public static bool Busy { get; private set; }
 
@@ -35,6 +38,7 @@ namespace ColourWays.Level
         {
             _instance = null;
             Busy = false;
+            TransitionStarted = null;
         }
 
         private RawImage _image;
@@ -86,6 +90,7 @@ namespace ColourWays.Level
         private IEnumerator Run(string sceneName)
         {
             Busy = true;
+            TransitionStarted?.Invoke(sceneName);
             _image.gameObject.SetActive(true);
 
             // Three different paint colours, a new pattern every time.
