@@ -53,6 +53,15 @@ namespace ColourWays.Paint
         [SerializeField, Range(0f, 1f)] private float splatEdgeSoftness = 0.06f;
         [SerializeField, Range(0f, 1.5f)] private float splatEdgeNoise = 0.7f;
 
+        [Header("Trail Fade")]
+        [Tooltip("Hidden/ColourWays/PaintFade material. Leave empty to keep paint forever.")]
+        [SerializeField] private Material fadeMaterial;
+        [Tooltip("Seconds for fully painted texels to fade back to the floor (0 = never fade).")]
+        [SerializeField, Min(0f)] private float trailFadeSeconds;
+
+        /// <summary>Multiplier on fade time (0 while the game is paused, higher on fast-forward).</summary>
+        public float FadeTimeScale { get; set; } = 1f;
+
         public event Action<Color> ColourChanged;
 
         public Color CurrentColour { get; private set; } = Color.white;
@@ -67,6 +76,8 @@ namespace ColourWays.Paint
         private static readonly int BrushNormalId = Shader.PropertyToID("_CW_BrushNormal");
         private static readonly int BrushColourId = Shader.PropertyToID("_CW_BrushColour");
         private static readonly int BrushParamsId = Shader.PropertyToID("_CW_BrushParams");
+        private static readonly int FadeAmountId = Shader.PropertyToID("_CW_FadeAmount");
+        private float _fadeAccumulator;
 
         private struct Stamp
         {
@@ -148,6 +159,7 @@ namespace ColourWays.Paint
 
             Shader.SetGlobalFloat(EnabledId, 0f);
             _cmd?.Release();
+            if (_quadMesh != null) Destroy(_quadMesh);
             if (_atlas != null)
             {
                 _atlas.Release();
@@ -201,6 +213,13 @@ namespace ColourWays.Paint
 
             ColourChanged?.Invoke(CurrentColour);
             return CurrentColour;
+        }
+
+        /// <summary>Make a specific colour the current one (e.g. a paint blob's colour).</summary>
+        public void SetColour(Color colour)
+        {
+            CurrentColour = colour;
+            ColourChanged?.Invoke(CurrentColour);
         }
 
         /// <summary>Re-seed colour selection (for a deterministic daily level).</summary>
@@ -381,10 +400,32 @@ namespace ColourWays.Paint
             _surfaces.Add(s);
         }
 
+        /// <summary>
+        /// Linear fade of the whole atlas so trails read like live flows. Applied in chunks of at
+        /// least ~2/255 alpha so 8-bit precision never stalls the fade.
+        /// </summary>
+        private void FadeTrails()
+        {
+            if (fadeMaterial == null || trailFadeSeconds <= 0f || !IsBuilt || _atlas == null) return;
+            _fadeAccumulator += Time.deltaTime * Mathf.Max(0f, FadeTimeScale);
+            float minChunk = trailFadeSeconds * (2f / 255f);
+            if (_fadeAccumulator < minChunk) return;
+
+            float amount = _fadeAccumulator / trailFadeSeconds;
+            _fadeAccumulator = 0f;
+            _cmd.Clear();
+            _cmd.SetRenderTarget(_atlas);
+            _cmd.SetGlobalFloat(FadeAmountId, amount);
+            _cmd.DrawProcedural(Matrix4x4.identity, fadeMaterial, 0, MeshTopology.Triangles, 3);
+            Graphics.ExecuteCommandBuffer(_cmd);
+            _cmd.Clear();
+        }
+
         // ------------------------------------------------------------------ Stamping
 
         private void LateUpdate()
         {
+            FadeTrails();
             if (_pending.Count == 0 || !IsBuilt || stampMaterial == null)
                 return;
 
@@ -396,6 +437,7 @@ namespace ColourWays.Paint
 
             bool linear = QualitySettings.activeColorSpace == ColorSpace.Linear;
             bool drewAnything = false;
+            ClearQuads();
 
             for (int i = 0; i < _pending.Count; i++)
             {
@@ -403,8 +445,13 @@ namespace ColourWays.Paint
                 // Brush is a sphere; pad slightly for noisy splat edges.
                 float reach = st.Radius * (st.Shape == BrushShape.Splat ? 1f + splatEdgeNoise * 0.6f : 1.1f);
                 var brushBounds = new Bounds(st.Position, Vector3.one * (reach * 2f));
+                Color c = linear ? st.Colour.linear : st.Colour;
+                bool splat = st.Shape == BrushShape.Splat;
+                var posRadius = new Vector4(st.Position.x, st.Position.y, st.Position.z, st.Radius);
+                var brushParams = new Vector4((float)st.Shape, splat ? splatEdgeSoftness : roundEdgeSoftness, splat ? splatEdgeNoise : roundEdgeNoise, st.Seed);
+                var colour = new Vector4(c.r, c.g, c.b, c.a);
 
-                bool paramsSet = false;
+                bool globalsSet = false;
                 for (int s = _surfaces.Count - 1; s >= 0; s--)
                 {
                     var surface = _surfaces[s];
@@ -413,24 +460,27 @@ namespace ColourWays.Paint
                         _surfaces.RemoveAt(s);
                         continue;
                     }
-                    if (!surface.isActiveAndEnabled || !surface.Renderer.bounds.Intersects(brushBounds))
+                    if (!surface.WorldBounds.Intersects(brushBounds) || !surface.isActiveAndEnabled)
                         continue;
 
-                    if (!paramsSet)
+                    if (surface.QuadStampable)
                     {
-                        Color c = linear ? st.Colour.linear : st.Colour;
-                        bool splat = st.Shape == BrushShape.Splat;
-                        _cmd.SetGlobalVector(BrushPosRadiusId, new Vector4(st.Position.x, st.Position.y, st.Position.z, st.Radius));
-                        _cmd.SetGlobalVector(BrushNormalId, st.Normal);
-                        _cmd.SetGlobalVector(BrushColourId, new Vector4(c.r, c.g, c.b, c.a));
-                        _cmd.SetGlobalVector(BrushParamsId, new Vector4(
-                            (float)st.Shape,
-                            splat ? splatEdgeSoftness : roundEdgeSoftness,
-                            splat ? splatEdgeNoise : roundEdgeNoise,
-                            st.Seed));
-                        paramsSet = true;
+                        // Fast path: only the few texels the brush can reach on each flat face.
+                        for (int chart = 0; chart < 6; chart++)
+                            if (surface.TryBrushQuad(chart, st.Position, reach, _corners, _cornerUvs, out Vector3 n))
+                                AddQuad(n, posRadius, st.Normal, brushParams, colour);
+                        continue;
                     }
 
+                    // Fallback: rasterise the whole surface in its paint-UV layout.
+                    if (!globalsSet)
+                    {
+                        _cmd.SetGlobalVector(BrushPosRadiusId, posRadius);
+                        _cmd.SetGlobalVector(BrushNormalId, st.Normal);
+                        _cmd.SetGlobalVector(BrushColourId, colour);
+                        _cmd.SetGlobalVector(BrushParamsId, brushParams);
+                        globalsSet = true;
+                    }
                     Mesh mesh = surface.PaintMesh;
                     Matrix4x4 matrix = surface.transform.localToWorldMatrix;
                     for (int sub = 0; sub < mesh.subMeshCount; sub++)
@@ -441,6 +491,28 @@ namespace ColourWays.Paint
 
             _pending.Clear();
 
+            if (_qPos.Count > 0)
+            {
+                // Every quad of every stamp this frame in one draw (pass 1 reads the brush per vertex).
+                if (_quadMesh == null)
+                {
+                    _quadMesh = new Mesh { name = "CW_PaintStampQuads", indexFormat = IndexFormat.UInt32 };
+                    _quadMesh.MarkDynamic();
+                }
+                _quadMesh.Clear();
+                _quadMesh.SetVertices(_qPos);
+                _quadMesh.SetNormals(_qNormal);
+                _quadMesh.SetUVs(0, _qUv);
+                _quadMesh.SetUVs(1, _qBrush);
+                _quadMesh.SetUVs(2, _qBrushNormal);
+                _quadMesh.SetUVs(3, _qParams);
+                _quadMesh.SetUVs(4, _qColour);
+                _quadMesh.SetIndices(_qIndex, MeshTopology.Triangles, 0, false);
+                _quadMesh.bounds = new Bounds(Vector3.zero, Vector3.one * 100000f);
+                _cmd.DrawMesh(_quadMesh, Matrix4x4.identity, stampMaterial, 0, 1);
+                drewAnything = true;
+            }
+
             if (drewAnything)
             {
                 Graphics.ExecuteCommandBuffer(_cmd);
@@ -448,6 +520,43 @@ namespace ColourWays.Paint
                     _atlas.GenerateMips();
             }
             _cmd.Clear();
+        }
+
+        // ------------------------------------------------------------------ Batched brush quads
+
+        private Mesh _quadMesh;
+        private readonly Vector3[] _corners = new Vector3[4];
+        private readonly Vector2[] _cornerUvs = new Vector2[4];
+        private readonly List<Vector3> _qPos = new List<Vector3>(256);
+        private readonly List<Vector3> _qNormal = new List<Vector3>(256);
+        private readonly List<Vector2> _qUv = new List<Vector2>(256);
+        private readonly List<Vector4> _qBrush = new List<Vector4>(256);
+        private readonly List<Vector4> _qBrushNormal = new List<Vector4>(256);
+        private readonly List<Vector4> _qParams = new List<Vector4>(256);
+        private readonly List<Vector4> _qColour = new List<Vector4>(256);
+        private readonly List<int> _qIndex = new List<int>(384);
+
+        private void ClearQuads()
+        {
+            _qPos.Clear(); _qNormal.Clear(); _qUv.Clear(); _qBrush.Clear();
+            _qBrushNormal.Clear(); _qParams.Clear(); _qColour.Clear(); _qIndex.Clear();
+        }
+
+        private void AddQuad(Vector3 faceNormal, Vector4 posRadius, Vector3 brushNormal, Vector4 brushParams, Vector4 colour)
+        {
+            int b = _qPos.Count;
+            for (int k = 0; k < 4; k++)
+            {
+                _qPos.Add(_corners[k]);
+                _qNormal.Add(faceNormal);
+                _qUv.Add(_cornerUvs[k]);
+                _qBrush.Add(posRadius);
+                _qBrushNormal.Add(brushNormal);
+                _qParams.Add(brushParams);
+                _qColour.Add(colour);
+            }
+            _qIndex.Add(b); _qIndex.Add(b + 1); _qIndex.Add(b + 2);
+            _qIndex.Add(b); _qIndex.Add(b + 2); _qIndex.Add(b + 3);
         }
     }
 }

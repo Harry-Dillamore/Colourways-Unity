@@ -45,7 +45,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ColourWays.Paint.PaintManager
   atlasSize: 4096
-  texelsPerMetre: 40
+  texelsPerMetre: 80
   chartPadding: 2
   generateMipmaps: 0
   palette: {fileID: 11400000, guid: acf9d9b42ef26734aa5a9c60ece2b6a2, type: 2}
@@ -53,5 +53,7 @@ MonoBehaviour:
   seed: 0
   roundEdgeSoftness: 0.12
   roundEdgeNoise: 0.12
-  splatEdgeSoftness: 0.06
-  splatEdgeNoise: 0.7
+  splatEdgeSoftness: 0.05
+  splatEdgeNoise: 1
+  fadeMaterial: {fileID: 0}
+  trailFadeSeconds: 0

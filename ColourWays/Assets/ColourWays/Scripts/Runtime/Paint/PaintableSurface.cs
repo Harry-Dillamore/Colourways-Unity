@@ -55,6 +55,10 @@ namespace ColourWays.Paint
             public bool Paintable;
             public RectInt Rect; // inner rect in atlas pixels (padding excluded)
             public bool Allocated;
+            // Extent along the face normal axis (scaled local space). Equal for flat box faces.
+            public float AxisMin;
+            public float AxisMax;
+            public bool Planar => AxisMax - AxisMin < 1e-4f;
         }
 
         private MeshFilter _filter;
@@ -74,12 +78,22 @@ namespace ColourWays.Paint
         private List<Vector2> _uv1;
         private List<int>[] _submeshIndices;
 
+        // Kept after packing, for fast brush-quad stamping (the level is static once built).
+        private Vector3 _scale = Vector3.one;
+        private Matrix4x4 _localToWorld = Matrix4x4.identity;
+        private Matrix4x4 _worldToLocal = Matrix4x4.identity;
+        private float _atlasInv = 1f;
+
         public Faces PaintableFaces => paintableFaces;
         public float TexelDensityScale => texelDensityScale;
         public Renderer Renderer => _renderer;
         public Mesh PaintMesh => _paintMesh;
         public bool IsReady => _paintMesh != null;
         internal Chart[] Charts => _charts;
+        /// <summary>World bounds, cached when the atlas was applied (surfaces don't move).</summary>
+        internal Bounds WorldBounds { get; private set; }
+        /// <summary>True when every paintable chart is a flat face, so brushes can be stamped as small quads.</summary>
+        internal bool QuadStampable { get; private set; }
 
         private void Awake()
         {
@@ -135,6 +149,7 @@ namespace ColourWays.Paint
 
             Vector3 scale = transform.lossyScale;
             scale = new Vector3(Mathf.Abs(scale.x), Mathf.Abs(scale.y), Mathf.Abs(scale.z));
+            _scale = scale;
 
             var srcPositions = _sourceMesh.vertices;
             var srcNormals = _sourceMesh.normals;
@@ -167,6 +182,8 @@ namespace ColourWays.Paint
                 {
                     Min = new Vector2(float.MaxValue, float.MaxValue),
                     Max = new Vector2(float.MinValue, float.MinValue),
+                    AxisMin = float.MaxValue,
+                    AxisMax = float.MinValue,
                     Paintable = (paintableFaces & (Faces)(1 << c)) != 0,
                 };
             }
@@ -231,7 +248,8 @@ namespace ColourWays.Paint
                 if (hasUv0) _uv0.Add(srcUv0[src]);
                 if (hasUv1) _uv1.Add(srcUv1[src]);
 
-                Vector2 proj = Project(Vector3.Scale(p, scale), chart);
+                Vector3 scaled = Vector3.Scale(p, scale);
+                Vector2 proj = Project(scaled, chart);
                 _projected.Add(proj);
                 _vertexChart.Add(chart);
 
@@ -239,6 +257,9 @@ namespace ColourWays.Paint
                 ch.HasTriangles = true;
                 ch.Min = Vector2.Min(ch.Min, proj);
                 ch.Max = Vector2.Max(ch.Max, proj);
+                float along = scaled[chart >> 1];
+                ch.AxisMin = Mathf.Min(ch.AxisMin, along);
+                ch.AxisMax = Mathf.Max(ch.AxisMax, along);
 
                 remap.Add(key, index);
                 return index;
@@ -314,6 +335,15 @@ namespace ColourWays.Paint
             _paintMesh = mesh;
             _filter.sharedMesh = mesh;
 
+            _atlasInv = inv;
+            _localToWorld = transform.localToWorldMatrix;
+            _worldToLocal = transform.worldToLocalMatrix;
+            WorldBounds = _renderer.bounds;
+            bool planar = true;
+            for (int c = 0; c < 6; c++)
+                if (_charts[c].Allocated && !_charts[c].Planar) planar = false;
+            QuadStampable = planar;
+
             // Release the intermediate data.
             _projected = null;
             _vertexChart = null;
@@ -324,6 +354,55 @@ namespace ColourWays.Paint
             _uv0 = null;
             _uv1 = null;
             _submeshIndices = null;
+        }
+
+        /// <summary>
+        /// The part of a flat face chart a brush can reach, as a world-space quad with matching
+        /// atlas UVs (corners in order: (lo,lo), (hi,lo), (hi,hi), (lo,hi)). Stamping this quad
+        /// instead of the whole mesh rasterises only the texels near the brush.
+        /// </summary>
+        internal bool TryBrushQuad(int chart, Vector3 worldPos, float reach, Vector3[] corners, Vector2[] uvs, out Vector3 normal)
+        {
+            normal = Vector3.up;
+            Chart ch = _charts[chart]; // copy: read-only here, and captured by the local function
+            if (!ch.Allocated) return false;
+
+            Vector3 sp = Vector3.Scale(_worldToLocal.MultiplyPoint3x4(worldPos), _scale);
+            int axis = chart >> 1;
+            float along = sp[axis];
+            if (along < ch.AxisMin - reach || along > ch.AxisMax + reach) return false;
+
+            Vector2 size = ch.Max - ch.Min;
+            if (size.x < 1e-5f || size.y < 1e-5f || ch.Rect.width <= 0 || ch.Rect.height <= 0) return false;
+            Vector2 q = Project(sp, chart);
+            float pad = reach + Mathf.Max(size.x / ch.Rect.width, size.y / ch.Rect.height); // one texel of slack
+            Vector2 lo = Vector2.Max(q - new Vector2(pad, pad), ch.Min);
+            Vector2 hi = Vector2.Min(q + new Vector2(pad, pad), ch.Max);
+            if (lo.x >= hi.x || lo.y >= hi.y) return false;
+
+            float plane = (ch.AxisMin + ch.AxisMax) * 0.5f;
+            Corner(0, lo.x, lo.y);
+            Corner(1, hi.x, lo.y);
+            Corner(2, hi.x, hi.y);
+            Corner(3, lo.x, hi.y);
+
+            Vector3 localNormal = Vector3.zero;
+            localNormal[axis] = (chart & 1) == 0 ? 1f : -1f;
+            normal = _localToWorld.MultiplyVector(localNormal).normalized;
+            return true;
+
+            void Corner(int i, float x, float y)
+            {
+                Vector3 s = axis == 0 ? new Vector3(plane, y, x) : axis == 1 ? new Vector3(x, plane, y) : new Vector3(x, y, plane);
+                var local = new Vector3(
+                    _scale.x > 1e-6f ? s.x / _scale.x : 0f,
+                    _scale.y > 1e-6f ? s.y / _scale.y : 0f,
+                    _scale.z > 1e-6f ? s.z / _scale.z : 0f);
+                corners[i] = _localToWorld.MultiplyPoint3x4(local);
+                RectInt r = ch.Rect;
+                uvs[i] = new Vector2((r.xMin + (x - ch.Min.x) / size.x * r.width) * _atlasInv,
+                                     (r.yMin + (y - ch.Min.y) / size.y * r.height) * _atlasInv);
+            }
         }
 
         private static int DominantChart(Vector3 n)

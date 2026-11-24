@@ -35,6 +35,12 @@ Shader "ColourWays/Surface"
         _UnpaintedShade ("Show Unpainted Layout", Range(0, 1)) = 0
         _UnpaintedInk ("Unpainted Dot Colour", Color) = (0.74, 0.64, 0.92, 1)
 
+        [Header(Paint Look)]
+        _PaintEdge ("Paint Edge (coverage threshold)", Range(0.05, 0.9)) = 0.35
+        _PaintRim ("Paint Rim Darkening", Range(0, 1)) = 0.16
+        _PaintGloss ("Paint Gloss (emboss highlight)", Range(0, 2)) = 0.55
+        _PaintEmboss ("Paint Emboss Distance (texels)", Range(0.5, 4)) = 1.6
+
         [Header(Outline)]
         _OutlineColor ("Outline Colour", Color) = (0.07, 0.07, 0.09, 1)
         _OutlineWidth ("Outline Width (world)", Range(0, 0.1)) = 0.02
@@ -46,6 +52,7 @@ Shader "ColourWays/Surface"
 
         HLSLINCLUDE
         #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
+        #include "ColourWaysTheme.hlsl"
 
         CBUFFER_START(UnityPerMaterial)
             half4 _BaseColor;
@@ -68,6 +75,10 @@ Shader "ColourWays/Surface"
             half4 _UnpaintedInk;
             half4 _OutlineColor;
             float _OutlineWidth;
+            half _PaintEdge;
+            half _PaintRim;
+            half _PaintGloss;
+            float _PaintEmboss;
         CBUFFER_END
 
         // Globals set by PaintManager.
@@ -189,9 +200,34 @@ Shader "ColourWays/Surface"
                         ? lerp(_BaseColor.rgb, _UnpaintedInk.rgb, pattern)
                         : Shade(_BaseColor.rgb, pattern);
                     unpainted = _UnpaintedFlat > 0.5 ? _BaseColor.rgb : unpainted;
-                    colour = lerp(unpainted, Shade(paint.rgb, pattern), saturate(paint.a));
+
+                    // Coverage: the bilinear alpha is a soft field; cut it with an anti-aliased
+                    // threshold so splats get crisp, smooth (vector-like) edges at any zoom.
+                    float a = paint.a;
+                    float aw = max(fwidth(a), 1e-3) * 0.75;
+                    float cover = smoothstep(_PaintEdge - aw, _PaintEdge + aw, a);
+
+                    // True colour: stamps blend onto a clear (black) atlas, which darkens partly
+                    // covered texels. Undo that so edges don't get dirty fringes.
+                    half3 pc = saturate(paint.rgb / max(a, 0.05));
+
+                    // Thick wet paint: a slightly darker rim just inside the edge, and an emboss
+                    // from the coverage field (edges facing the light catch a highlight).
+                    float2 off = _CW_PaintAtlasTexel.xy * _PaintEmboss;
+                    float aUp = SamplePaint(input.paintUV + off, input.chartRect).a;
+                    float aDown = SamplePaint(input.paintUV - off, input.chartRect).a;
+                    float slope = saturate(aDown) - saturate(aUp);
+                    float rim = 1.0 - smoothstep(_PaintEdge, _PaintEdge + 0.3, a);
+                    half3 painted = Shade(pc, pattern);
+                    painted *= 1.0 - rim * _PaintRim;
+                    painted = saturate(painted + slope * _PaintGloss * 0.5 * (1.0 - rim));
+                    painted *= 1.0 - saturate(-slope) * _PaintGloss * 0.3;
+
+                    // Theme each layer before blending, so paint on a dark floor glows
+                    // instead of tinting the inverted floor the opposite hue.
+                    colour = lerp(CWTheme(unpainted), CWTheme(painted), cover);
                 #else
-                    colour = Shade(_BaseColor.rgb, pattern);
+                    colour = CWTheme(Shade(_BaseColor.rgb, pattern));
                 #endif
 
                 colour *= 1.0 - TileLineMask(input.positionWS, n) * _TileLines;
@@ -232,7 +268,7 @@ Shader "ColourWays/Surface"
             half4 frag(Varyings input) : SV_Target
             {
                 clip(_OutlineWidth - 1e-5);
-                return half4(MixFog(_OutlineColor.rgb, input.fogFactor), 1.0);
+                return half4(MixFog(CWTheme(_OutlineColor.rgb), input.fogFactor), 1.0);
             }
             ENDHLSL
         }
